@@ -9,6 +9,7 @@ interface SettingsModalProps {
   updateSettings: (newSettings: Partial<Settings>) => void;
   onClearHistory: () => void;
   onExportChat: () => void;
+  onChangeApiKey: () => void;
 }
 
 const VOICE_OPTIONS: Voice[] = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir'];
@@ -23,6 +24,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   updateSettings,
   onClearHistory,
   onExportChat,
+  onChangeApiKey,
 }) => {
   if (!isOpen) {
     return null;
@@ -126,6 +128,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             <div className="border-t border-gray-200 dark:border-gray-700 pt-6 space-y-3">
+                 <button 
+                    onClick={onChangeApiKey}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                 >
+                    Thay đổi Khóa API
+                 </button>
                  <button 
                     onClick={onExportChat}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"

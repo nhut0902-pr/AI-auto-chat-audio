@@ -24,6 +24,8 @@ import {
     XMarkIcon
 } from './components/Icons';
 
+const API_KEY_STORAGE_KEY = 'gemini-chat-api-key';
+
 const App: React.FC = () => {
     const { settings, updateSettings } = useSettings();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -32,25 +34,17 @@ const App: React.FC = () => {
     const [chatMode, setChatMode] = useState<ChatMode>('default');
     const [inputText, setInputText] = useState('');
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [apiKey, setApiKey] = useState('');
     const [isKeySelected, setIsKeySelected] = useState(false);
-    const [isCheckingForKey, setIsCheckingForKey] = useState(true);
     const bottomOfChatRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        const checkApiKey = async () => {
-            setIsCheckingForKey(true);
-            try {
-                if (await (window as any).aistudio.hasSelectedApiKey()) {
-                    setIsKeySelected(true);
-                }
-            } catch (e) {
-                console.error("Error checking for API key:", e);
-            } finally {
-                setIsCheckingForKey(false);
-            }
-        };
-        checkApiKey();
+        const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+        if (storedApiKey) {
+            setApiKey(storedApiKey);
+            setIsKeySelected(true);
+        }
     }, []);
 
     useEffect(() => {
@@ -59,15 +53,24 @@ const App: React.FC = () => {
         }
     }, [transcript, isKeySelected]);
 
-    const handleSelectKey = async () => {
-        try {
-            await (window as any).aistudio.openSelectKey();
-            // Assume success and update the UI immediately
+    const handleApiKeySubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        const enteredKey = (e.currentTarget.elements.namedItem('apiKey') as HTMLInputElement).value;
+        if (enteredKey) {
+            localStorage.setItem(API_KEY_STORAGE_KEY, enteredKey);
+            setApiKey(enteredKey);
             setIsKeySelected(true);
-        } catch (e) {
-            console.error("Error opening select key dialog:", e);
         }
     };
+
+    const handleChangeApiKey = useCallback(() => {
+        if (window.confirm('Bạn có muốn thay đổi Khóa API không? Khóa hiện tại sẽ bị xóa.')) {
+            localStorage.removeItem(API_KEY_STORAGE_KEY);
+            setApiKey('');
+            setIsKeySelected(false);
+            setIsSettingsOpen(false); // Close modal after action
+        }
+    }, []);
 
 
     const handleClearHistory = useCallback(() => {
@@ -136,7 +139,7 @@ const App: React.FC = () => {
         setTranscript(prev => [...prev, geminiTypingMessage]);
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = new GoogleGenAI({ apiKey });
             let finalEntry: Omit<TranscriptEntry, 'source'> = { text: '' };
 
             const textParts: string[] = [inputText];
@@ -223,8 +226,10 @@ const App: React.FC = () => {
         } catch (error) {
             console.error("Gemini API call failed:", error);
             const errorMessage = (error instanceof Error) ? error.message : "Đã xảy ra lỗi không xác định.";
-            if (errorMessage.includes("API key not valid") || errorMessage.includes("Requested entity was not found")) {
-                setTranscript(prev => [...prev.slice(0, -1), { source: 'gemini', text: `Lỗi: Khóa API không hợp lệ. Vui lòng chọn lại khóa.` }]);
+            if (errorMessage.includes("API key not valid") || errorMessage.includes("API key is invalid") || errorMessage.includes("API key authentication failed")) {
+                setTranscript(prev => [...prev.slice(0, -1), { source: 'gemini', text: `Lỗi: Khóa API không hợp lệ. Vui lòng nhập lại.` }]);
+                localStorage.removeItem(API_KEY_STORAGE_KEY);
+                setApiKey('');
                 setIsKeySelected(false);
             } else {
                  setTranscript(prev => [...prev.slice(0, -1), { source: 'gemini', text: `Lỗi: ${errorMessage}` }]);
@@ -387,38 +392,36 @@ const App: React.FC = () => {
         </button>
     );
 
-    if (isCheckingForKey) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
-                <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                    <GeminiIcon className="w-6 h-6 animate-spin" />
-                    <span>Đang kiểm tra Khóa API...</span>
-                </div>
-            </div>
-        );
-    }
-
     if (!isKeySelected) {
         return (
             <div className="flex flex-col items-center justify-center h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-6 text-center">
                  <GeminiIcon className="w-16 h-16 mb-6" />
                  <h1 className="text-3xl font-bold mb-3">Chào mừng bạn đến với Gemini Chat</h1>
                  <p className="max-w-md mb-6 text-gray-600 dark:text-gray-300">
-                    Để bắt đầu, vui lòng chọn Khóa API của bạn. Việc sử dụng API Gemini có thể phát sinh chi phí.
+                    Để bắt đầu, vui lòng nhập Khóa API Gemini của bạn bên dưới.
                  </p>
-                 <button 
-                    onClick={handleSelectKey}
-                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-                >
-                    Chọn Khóa API
-                 </button>
+                 <form onSubmit={handleApiKeySubmit} className="w-full max-w-sm flex flex-col items-center gap-4">
+                    <input 
+                        type="password"
+                        name="apiKey"
+                        placeholder="Nhập Khóa API của bạn tại đây"
+                        className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        required
+                    />
+                    <button 
+                        type="submit"
+                        className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                    >
+                        Tiếp tục
+                    </button>
+                 </form>
                  <a 
-                    href="https://ai.google.dev/gemini-api/docs/billing" 
+                    href="https://aistudio.google.com/app/apikey" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="mt-4 text-sm text-blue-500 hover:underline"
                  >
-                    Tìm hiểu thêm về thanh toán
+                    Nhận Khóa API
                  </a>
             </div>
         );
@@ -515,6 +518,7 @@ const App: React.FC = () => {
                 updateSettings={updateSettings}
                 onClearHistory={handleClearHistory}
                 onExportChat={handleExportChat}
+                onChangeApiKey={handleChangeApiKey}
             />
         </div>
     );
