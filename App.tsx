@@ -32,12 +32,42 @@ const App: React.FC = () => {
     const [chatMode, setChatMode] = useState<ChatMode>('default');
     const [inputText, setInputText] = useState('');
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [isKeySelected, setIsKeySelected] = useState(false);
+    const [isCheckingForKey, setIsCheckingForKey] = useState(true);
     const bottomOfChatRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        bottomOfChatRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [transcript]);
+        const checkApiKey = async () => {
+            setIsCheckingForKey(true);
+            try {
+                if (await (window as any).aistudio.hasSelectedApiKey()) {
+                    setIsKeySelected(true);
+                }
+            } catch (e) {
+                console.error("Error checking for API key:", e);
+            } finally {
+                setIsCheckingForKey(false);
+            }
+        };
+        checkApiKey();
+    }, []);
+
+    useEffect(() => {
+        if (isKeySelected) {
+            bottomOfChatRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [transcript, isKeySelected]);
+
+    const handleSelectKey = async () => {
+        try {
+            await (window as any).aistudio.openSelectKey();
+            // Assume success and update the UI immediately
+            setIsKeySelected(true);
+        } catch (e) {
+            console.error("Error opening select key dialog:", e);
+        }
+    };
 
 
     const handleClearHistory = useCallback(() => {
@@ -193,7 +223,12 @@ const App: React.FC = () => {
         } catch (error) {
             console.error("Gemini API call failed:", error);
             const errorMessage = (error instanceof Error) ? error.message : "Đã xảy ra lỗi không xác định.";
-            setTranscript(prev => [...prev.slice(0, -1), { source: 'gemini', text: `Lỗi: ${errorMessage}` }]);
+            if (errorMessage.includes("API key not valid") || errorMessage.includes("Requested entity was not found")) {
+                setTranscript(prev => [...prev.slice(0, -1), { source: 'gemini', text: `Lỗi: Khóa API không hợp lệ. Vui lòng chọn lại khóa.` }]);
+                setIsKeySelected(false);
+            } else {
+                 setTranscript(prev => [...prev.slice(0, -1), { source: 'gemini', text: `Lỗi: ${errorMessage}` }]);
+            }
         } finally {
             setConversationState(ConversationState.IDLE);
         }
@@ -351,6 +386,43 @@ const App: React.FC = () => {
             {icon} {label}
         </button>
     );
+
+    if (isCheckingForKey) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <GeminiIcon className="w-6 h-6 animate-spin" />
+                    <span>Đang kiểm tra Khóa API...</span>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isKeySelected) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-6 text-center">
+                 <GeminiIcon className="w-16 h-16 mb-6" />
+                 <h1 className="text-3xl font-bold mb-3">Chào mừng bạn đến với Gemini Chat</h1>
+                 <p className="max-w-md mb-6 text-gray-600 dark:text-gray-300">
+                    Để bắt đầu, vui lòng chọn Khóa API của bạn. Việc sử dụng API Gemini có thể phát sinh chi phí.
+                 </p>
+                 <button 
+                    onClick={handleSelectKey}
+                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                >
+                    Chọn Khóa API
+                 </button>
+                 <a 
+                    href="https://ai.google.dev/gemini-api/docs/billing" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="mt-4 text-sm text-blue-500 hover:underline"
+                 >
+                    Tìm hiểu thêm về thanh toán
+                 </a>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white font-sans">
